@@ -30,17 +30,15 @@ A practical implementation of contraction-based adaptive control for quadrotor t
 
 **The Problem:** Quadrotors must track trajectories precisely, but their parameters change during flight:
 
-- **Battery drain:** Mass decreases ~12% during typical flight
 - **Payload variations:** ±67% mass change when picking up/dropping objects
-- **Altitude effects:** Drag coefficients vary ±30% with air density
-- **Motor degradation:** Efficiency drops ~20% over 200 flight hours
+- **Altitude effects:** Drag coefficients vary ±30% with air density changes
 
 **Traditional controllers fail** when parameters deviate significantly from nominal values. A PD controller tuned for 1.5 kg might have 15-40 cm RMS tracking error when the drone is 2.5 kg.
 
 **Our solution:** Adaptive control using **contraction theory** — a framework that:
-- Estimates parameters online (mass, drag, inertia)
+- Estimates parameters online (mass, drag)
 - Guarantees exponential convergence to desired trajectory
-- Handles 50-300% parameter variations
+- Handles 50-150% parameter variations
 - Achieves 2-5 cm RMS tracking error across all scenarios
 
 ---
@@ -50,9 +48,8 @@ A practical implementation of contraction-based adaptive control for quadrotor t
 ### Real-World Scenarios
 
 1. **Package Delivery:** Drone picks up 2 kg package → mass doubles → fixed controller oscillates
-2. **Battery Drain:** 15-minute flight → 200g mass loss → gradual performance degradation
-3. **High-Altitude Operations:** Flying at 3000m altitude → 30% thinner air → drag changes
-4. **Motor Aging:** Propeller damage or motor wear → thrust efficiency decreases
+2. **High-Altitude Operations:** Flying at 3000m altitude → 30% thinner air → drag coefficient changes by ±30%
+3. **Variable Payloads:** Different package weights during delivery missions → continuous mass variations
 
 ### The Challenge
 
@@ -167,8 +164,8 @@ State vector: **x = [z, v_z, θ, ω]^T**
 ### Dynamics
 
 ```
-m·z̈ = u - mg - d·ż        (vertical dynamics)
-I·θ̈ = τ                    (rotational dynamics)
+m·z̈ = u - mg - d·ż        (vertical dynamics with uncertain m, d)
+I·θ̈ = τ                    (rotational dynamics, I assumed known)
 ```
 
 Control inputs:
@@ -177,10 +174,9 @@ Control inputs:
 
 ### Uncertain Parameters
 
-**θ = [m, d, I]^T**
-- **m**: Mass (kg) — varies with battery/payload
-- **d**: Drag coefficient (N·s/m) — varies with altitude
-- **I**: Moment of inertia (kg·m²) — varies with configuration
+**θ = [m, d]^T**
+- **m**: Mass (kg) — varies with payload changes
+- **d**: Drag coefficient (N·s/m) — varies with altitude/air density
 
 ### Key Property: Matched Uncertainty
 
@@ -221,8 +217,11 @@ Makes the **nominal system** (θ = θ_nominal) contracting:
 e = x - x_d              # Position error
 e_v = ẋ - ẋ_d            # Velocity error
 
+# Vertical thrust control (adaptive for mass and drag)
 u_nominal = m_nominal * (ẍ_d + k_v·ė_v + k_p·e) + m_nominal·g + d_nominal·ż
-τ_nominal = I_nominal * (ω̇_d + k_θ·θ̃ + k_ω·ω̃)
+
+# Attitude control (non-adaptive, I is known)
+τ_nominal = I * (ω̇_d + k_θ·θ̃ + k_ω·ω̃)
 ```
 
 **Design criterion:** Choose gains **k_p, k_v, k_θ, k_ω** such that:
@@ -236,11 +235,9 @@ Compensates for parameter errors using **regressor matrix**:
 
 ```python
 # Regressor: φ(x, ẋ_d, ẍ_d) such that uncertainty = φ^T·θ̃
-φ_z = [ẍ_d + g, ż, 0]^T        # For vertical dynamics
-φ_θ = [0, 0, ω̇_d]^T            # For rotational dynamics
+φ_z = [ẍ_d + g, ż]^T           # For vertical dynamics: [mass term, drag term]
 
 u_adaptive = -φ_z^T · θ̂
-τ_adaptive = -φ_θ^T · θ̂
 ```
 
 **Key advantage:** To add a new uncertain parameter (e.g., propeller efficiency), just add a column to **φ**!
@@ -326,11 +323,11 @@ jupyter>=1.0.0
 # Run nominal scenario (no parameter variation)
 python simulate.py --scenario nominal --duration 30
 
-# Run with battery drain
-python simulate.py --scenario battery_drain --duration 30
-
 # Run with heavy payload
 python simulate.py --scenario heavy_payload --duration 30
+
+# Run with high altitude (low air density)
+python simulate.py --scenario high_altitude --duration 30
 
 # Compare fixed vs adaptive controller
 python simulate.py --scenario comparison --controller both
@@ -346,16 +343,14 @@ from simulation.trajectories import CircleTrajectory
 # Create simulator with uncertain parameters
 sim = QuadrotorSimulator(
     true_mass=2.0,        # True mass (unknown to controller)
-    true_drag=0.3,
-    true_inertia=0.015
+    true_drag=0.3,        # True drag coefficient
 )
 
 # Create adaptive controller with nominal estimates
 controller = AdaptiveController(
     mass_nominal=1.5,     # Initial estimate
-    drag_nominal=0.2,
-    inertia_nominal=0.01,
-    adaptation_gains=[1.0, 0.5, 2.0]
+    drag_nominal=0.2,     # Initial drag estimate
+    adaptation_gains=[1.0, 0.5]  # Gains for mass and drag
 )
 
 # Define trajectory
@@ -382,7 +377,7 @@ results.print_metrics()
 python analysis/plot_results.py --output figures/
 
 # Interactive 3D visualization
-python analysis/visualize_3d.py --scenario battery_drain
+python analysis/visualize_3d.py --scenario heavy_payload
 
 # Parameter convergence analysis
 python analysis/parameter_analysis.py
@@ -408,7 +403,7 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
 ├── simulation/
 │   ├── simulator.py          # Main simulation loop
 │   ├── trajectories.py       # Circle, lemniscate, polynomial
-│   └── disturbances.py       # Wind, battery drain, sensor noise
+│   └── disturbances.py       # Payload changes, altitude effects, sensor noise
 │
 ├── analysis/
 │   ├── plot_results.py       # Standard plotting functions
@@ -440,9 +435,9 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
 |----------|------------------|---------------------|-------------|
 | **Nominal** | 3.2 cm RMS | 2.1 cm RMS | 34% |
 | **Heavy payload (+67%)** | 28.5 cm RMS | 4.3 cm RMS | **85%** |
-| **Battery drain (-12%)** | 8.7 cm RMS | 2.8 cm RMS | 68% |
+| **Light payload (-33%)** | 12.3 cm RMS | 2.9 cm RMS | 76% |
 | **High altitude (+30% drag)** | 15.2 cm RMS | 3.6 cm RMS | 76% |
-| **Motor degradation (-20%)** | 22.1 cm RMS | 5.1 cm RMS | 77% |
+| **Low altitude (-20% drag)** | 9.8 cm RMS | 2.5 cm RMS | 74% |
 
 ### Example Plots
 
@@ -459,7 +454,8 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
 [Plot would show]:
 - True mass: 2.0 kg (horizontal line)
 - Estimated mass: starts at 1.5 kg, converges to ~2.0 kg within 10 seconds
-- Similar for drag and inertia
+- True drag: 0.3 N·s/m (horizontal line)
+- Estimated drag: starts at 0.2 N·s/m, converges to ~0.3 N·s/m within 10 seconds
 ```
 
 #### Contraction Rate
@@ -473,8 +469,8 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
 ### Key Observations
 
 1. **Exponential convergence:** Error decreases as **e^(-λt)** with λ ≈ 0.4 rad/s
-2. **Parameter convergence:** Estimates reach 95% of true values within 8-12 seconds
-3. **Robustness:** Handles 50-300% parameter variations without retuning
+2. **Parameter convergence:** Mass and drag estimates reach 95% of true values within 8-12 seconds
+3. **Robustness:** Handles 33-67% mass variations and ±30% drag variations without retuning
 4. **Computational efficiency:** ~0.5 ms per control update on standard laptop
 
 ---
@@ -516,10 +512,11 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
    - Estimated effort: 2-3 weeks
 
 2. **Additional Uncertainty Sources**
+   - Moment of inertia variations
    - Center of mass offset
    - Aerodynamic moments
    - Propeller thrust coefficients
-   - Estimated effort: 1 week
+   - Estimated effort: 1-2 weeks
 
 3. **Experimental Validation**
    - Implement on Crazyflie 2.1 or PX4-based platform
