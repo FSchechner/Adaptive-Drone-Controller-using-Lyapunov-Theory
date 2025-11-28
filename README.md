@@ -17,12 +17,8 @@ A practical implementation of contraction-based adaptive control for quadrotor t
 - [Contraction vs Classical Lyapunov](#contraction-vs-classical-lyapunov)
 - [System Model](#system-model)
 - [Controller Design](#controller-design)
-- [Installation](#installation)
 - [Quick Start](#quick-start)
-- [Project Structure](#project-structure)
-- [Results](#results)
 - [References](#references)
-- [Future Work](#future-work)
 
 ---
 
@@ -102,52 +98,19 @@ where **A = ∂f/∂x** is the Jacobian. If this holds ∀x, the system is contr
 
 ## Contraction vs Classical Lyapunov
 
-### Classical Lyapunov Approach (Backstepping)
+Traditional Lyapunov-based adaptive control (backstepping) requires:
+- Recursive design through position → velocity → attitude → angular rate
+- 10-15 pages of algebra to derive control laws and prove stability
+- Strict-feedback structure required
+- Complete redesign when adding new uncertain parameters
 
-For a quadrotor with adaptive control:
+**Contraction approach:**
+1. Design nominal controller (PD + feedforward)
+2. Add adaptive compensation: u = u_nominal + u_adaptive
+3. Verify contraction: check eigenvalues of (A^T M + MA + Ṁ) ≺ -2λM
+4. Done!
 
-```
-Step 1: Position error z̃ = z - z_d
-        V₁ = ½z̃²  →  Choose virtual velocity v_d
-
-Step 2: Velocity error ṽ = v - v_d
-        V₂ = V₁ + ½ṽ²  →  Choose virtual thrust
-
-Step 3: Attitude error θ̃ = θ - θ_d
-        V₃ = V₂ + ½θ̃²  →  Choose virtual angular velocity
-
-Step 4: Angular rate error ω̃ = ω - ω_d
-        V₄ = V₃ + ½ω̃²  →  Derive torque control law
-
-Step 5: Parameter errors θ̃_p = θ - θ̂
-        V₅ = V₄ + ½θ̃_p^T Γ^(-1) θ̃_p  →  Derive adaptation law
-
-Compute V̇₅, manipulate algebra to ensure V̇₅ ≤ -c||x||²
-```
-
-**Result:** 10-15 pages of algebra, strict-feedback structure required, fragile to model changes.
-
-### Contraction Approach
-
-```
-Step 1: Design nominal controller (PD + feedforward)
-Step 2: Add adaptive compensation u = u_nominal + u_adaptive
-Step 3: Check eigenvalues of (A^T M + MA + Ṁ)
-Step 4: If negative definite → Done!
-```
-
-**Result:** 3-5 pages of design, works for any stabilizable system, modular parameter addition.
-
-### Comparison Table
-
-| Aspect | Lyapunov Backstepping | Contraction Theory |
-|--------|----------------------|-------------------|
-| **Design complexity** | High (recursive) | Low (direct) |
-| **Algebra required** | 10-15 pages | 3-5 pages |
-| **Structure needed** | Strict-feedback | Any stabilizable |
-| **Adding parameters** | Redesign all steps | Append to regressor |
-| **Verification** | Analytical V̇ | Numerical eigenvalues |
-| **Convergence rate** | Often unclear | Explicit λ |
+**Key advantages:** Direct verification (no recursive derivation), works for any stabilizable system, adding parameters = appending to regressor matrix
 
 ---
 
@@ -275,46 +238,6 @@ is_contracting = np.all(np.real(eigenvalues) < -2*lambda_min)
 
 ---
 
-## Installation
-
-### Requirements
-
-- Python 3.8+
-- NumPy >= 1.20
-- SciPy >= 1.7
-- Matplotlib >= 3.3
-- (Optional) Jupyter for notebooks
-
-### Setup
-
-```bash
-# Clone repository
-git clone https://github.com/FSchechner/Adaptive-Drone-Controller-using-Contraction-Theory
-cd Adaptive-Drone-Controller-using-Contraction-Theory
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Verify installation
-python -m pytest tests/
-```
-
-### Dependencies (requirements.txt)
-
-```
-numpy>=1.20.0
-scipy>=1.7.0
-matplotlib>=3.3.0
-pytest>=6.0.0
-jupyter>=1.0.0
-```
-
----
-
 ## Quick Start
 
 ### Basic Simulation
@@ -385,96 +308,6 @@ python analysis/parameter_analysis.py
 
 ---
 
-## Project Structure
-
-```
-Adaptive-Drone-Controller-using-Contraction-Theory/
-├── dynamics/
-│   ├── quadrotor.py          # 2D quadrotor physics
-│   ├── actuators.py          # Motor models, saturation
-│   └── sensors.py            # IMU, position sensors (with noise)
-│
-├── control/
-│   ├── adaptive_controller.py   # Main contraction-based controller
-│   ├── fixed_controller.py      # Baseline PD controller
-│   ├── geometric_control.py     # SE(3) geometric controller (future)
-│   └── regressors.py            # Parameter regressor matrices
-│
-├── simulation/
-│   ├── simulator.py          # Main simulation loop
-│   ├── trajectories.py       # Circle, lemniscate, polynomial
-│   └── disturbances.py       # Payload changes, altitude effects, sensor noise
-│
-├── analysis/
-│   ├── plot_results.py       # Standard plotting functions
-│   ├── metrics.py            # RMS error, settling time, etc.
-│   └── comparison.py         # Fixed vs adaptive comparison
-│
-├── tests/
-│   ├── test_contraction.py   # Verify contraction condition
-│   ├── test_adaptation.py    # Test parameter convergence
-│   └── test_dynamics.py      # Unit tests for dynamics
-│
-├── notebooks/
-│   ├── 01_introduction.ipynb        # Theory walkthrough
-│   ├── 02_controller_design.ipynb   # Step-by-step design
-│   └── 03_results_analysis.ipynb    # Results visualization
-│
-├── simulate.py               # Main entry point
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Results
-
-### Performance Metrics
-
-| Scenario | Fixed Controller | Adaptive Controller | Improvement |
-|----------|------------------|---------------------|-------------|
-| **Nominal** | 3.2 cm RMS | 2.1 cm RMS | 34% |
-| **Heavy payload (+67%)** | 28.5 cm RMS | 4.3 cm RMS | **85%** |
-| **Light payload (-33%)** | 12.3 cm RMS | 2.9 cm RMS | 76% |
-| **High altitude (+30% drag)** | 15.2 cm RMS | 3.6 cm RMS | 76% |
-| **Low altitude (-20% drag)** | 9.8 cm RMS | 2.5 cm RMS | 74% |
-
-### Example Plots
-
-#### Trajectory Tracking
-```
-[Plot would show]:
-- Desired trajectory (dashed line)
-- Fixed controller trajectory (red, large deviations)
-- Adaptive controller trajectory (blue, tight tracking)
-```
-
-#### Parameter Convergence
-```
-[Plot would show]:
-- True mass: 2.0 kg (horizontal line)
-- Estimated mass: starts at 1.5 kg, converges to ~2.0 kg within 10 seconds
-- True drag: 0.3 N·s/m (horizontal line)
-- Estimated drag: starts at 0.2 N·s/m, converges to ~0.3 N·s/m within 10 seconds
-```
-
-#### Contraction Rate
-```
-[Plot would show]:
-- Log of tracking error norm
-- Slope = -λ (exponential decay rate)
-- Typical λ ≈ 0.3-0.5 rad/s
-```
-
-### Key Observations
-
-1. **Exponential convergence:** Error decreases as **e^(-λt)** with λ ≈ 0.4 rad/s
-2. **Parameter convergence:** Mass and drag estimates reach 95% of true values within 8-12 seconds
-3. **Robustness:** Handles 33-67% mass variations and ±30% drag variations without retuning
-4. **Computational efficiency:** ~0.5 ms per control update on standard laptop
-
----
-
 ## References
 
 ### Primary Reference
@@ -502,77 +335,6 @@ Adaptive-Drone-Controller-using-Contraction-Theory/
 
 ---
 
-## Future Work
-
-### Short-Term Extensions
-
-1. **Full 6-DOF Implementation**
-   - Extend to 3D position + 3D attitude
-   - SE(3) geometric control framework
-   - Estimated effort: 2-3 weeks
-
-2. **Additional Uncertainty Sources**
-   - Moment of inertia variations
-   - Center of mass offset
-   - Aerodynamic moments
-   - Propeller thrust coefficients
-   - Estimated effort: 1-2 weeks
-
-3. **Experimental Validation**
-   - Implement on Crazyflie 2.1 or PX4-based platform
-   - ROS integration
-   - Hardware-in-the-loop testing
-   - Estimated effort: 4-6 weeks
-
-### Medium-Term Goals
-
-4. **Disturbance Rejection**
-   - Wind gusts and turbulence
-   - Unmodeled dynamics (ground effect, blade flapping)
-   - Combine contraction with robust control
-
-5. **Learning-Based Enhancements**
-   - Neural network-augmented regressors
-   - Online learning of φ(x) structure
-   - Combine with Gaussian processes
-
-6. **Multi-Agent Systems**
-   - Contraction-based formation control
-   - Distributed parameter estimation
-   - Resilience to communication delays
-
-### Long-Term Vision
-
-7. **Aggressive Maneuvers**
-   - Acrobatic flight with large attitude changes
-   - Extend contraction analysis to SO(3)
-   - Handle actuator saturation
-
-8. **Vision-Based Control**
-   - Integrate with visual SLAM
-   - Contraction analysis in image space
-   - Adaptive visual servoing
-
----
-
-## Contributing
-
-Contributions welcome! Areas of interest:
-- Adding new trajectory types
-- Implementing alternative metrics M(x)
-- Hardware experiments
-- Performance benchmarking
-
-Please open an issue or submit a pull request.
-
----
-
-## License
-
-MIT License — see LICENSE file for details.
-
----
-
 ## Acknowledgments
 
 - **Prof. Jean-Jacques Slotine** for foundational work on contraction theory
@@ -587,6 +349,3 @@ For questions or collaboration:
 - GitHub Issues: [https://github.com/FSchechner/Adaptive-Drone-Controller-using-Contraction-Theory/issues](https://github.com/FSchechner/Adaptive-Drone-Controller-using-Contraction-Theory/issues)
 - GitHub Repository: [https://github.com/FSchechner/Adaptive-Drone-Controller-using-Contraction-Theory](https://github.com/FSchechner/Adaptive-Drone-Controller-using-Contraction-Theory)
 
----
-
-**Built with contraction theory — because sometimes the shortest path is through differential geometry.** 🚁
