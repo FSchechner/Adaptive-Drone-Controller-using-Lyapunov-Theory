@@ -29,13 +29,12 @@ A practical implementation of contraction-based adaptive control for quadrotor t
 - **Payload variations:** ±67% mass change when picking up/dropping objects
 - **Altitude effects:** Drag coefficients vary ±30% with air density changes
 
-**Traditional controllers fail** when parameters deviate significantly from nominal values. A PD controller tuned for 1.5 kg might have 15-40 cm RMS tracking error when the drone is 2.5 kg.
+**Traditional controllers fail** when parameters deviate significantly from nominal values.
 
 **Our solution:** Adaptive control using **contraction theory** — a framework that:
 - Estimates parameters online (mass, drag)
 - Guarantees exponential convergence to desired trajectory
-- Handles 50-150% parameter variations
-- Achieves 2-5 cm RMS tracking error across all scenarios
+- Adapts to parameter variations without manual retuning
 
 ---
 
@@ -43,8 +42,8 @@ A practical implementation of contraction-based adaptive control for quadrotor t
 
 ### Real-World Scenarios
 
-1. **Package Delivery:** Drone picks up 2 kg package → mass doubles → fixed controller oscillates
-2. **High-Altitude Operations:** Flying at 3000m altitude → 30% thinner air → drag coefficient changes by ±30%
+1. **Package Delivery:** Drone picks up packages → mass changes significantly → fixed controller performance degrades
+2. **High-Altitude Operations:** Flying at different altitudes → air density changes → drag coefficient varies
 3. **Variable Payloads:** Different package weights during delivery missions → continuous mass variations
 
 ### The Challenge
