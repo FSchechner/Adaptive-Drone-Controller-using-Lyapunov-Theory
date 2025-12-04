@@ -4,12 +4,12 @@ class QuadcopterController:
         self.m = mass
         self.g = g
 
-        self.Kp_xy = 0.12
-        self.Kd_xy = 0.5
+        self.Kp_xy = 0.3
+        self.Kd_xy = 0.6
         self.Kp_z = 5.0
         self.Kd_z = 3.0
-        self.Kp_att = 6.0
-        self.Kd_att = 0.6 
+        self.Kp_att = 15
+        self.Kd_att = 5
         
     def controller(self,state,target_pos): 
         x, y, z = state[0:3]
@@ -35,13 +35,14 @@ class QuadcopterController:
         v_forward = vx * np.cos(psi) + vy * np.sin(psi)
         theta_d = self.Kp_xy * distance - self.Kd_xy * v_forward
         phi_d = 0.0
-
-        max_tilt = np.radians(30)
+        max_tilt = np.radians(35)
         theta_d = np.clip(theta_d, -max_tilt, max_tilt)
 
         az_d = self.Kp_z * (z_d - z) - self.Kd_z * vz
-        F_total = self.m * (az_d + self.g)
-        F_total = np.clip(F_total, 0, 20)
+        Fz = self.m * (az_d + self.g)
+
+        cos_theta = np.cos(theta)
+        F_total = Fz / cos_theta
 
         tau_phi = self.Kp_att * (phi_d - phi) - self.Kd_att * omega_x
         tau_theta = self.Kp_att * (theta_d - theta) - self.Kd_att * omega_y
