@@ -1,5 +1,4 @@
 import numpy as np
-
 class QuadcopterController:
     def __init__(self, mass=1.2, g=9.81):
         self.m = mass
@@ -9,8 +8,7 @@ class QuadcopterController:
         self.Kd_xy = 0.5
         self.Kp_z = 5.0
         self.Kd_z = 3.0
-
-        self.Kp_att = 3.0
+        self.Kp_att = 6.0
         self.Kd_att = 0.6 
         
     def controller(self,state,target_pos): 
@@ -50,12 +48,3 @@ class QuadcopterController:
         tau_psi = self.Kp_att * e_psi - self.Kd_att * omega_z
 
         return np.array([F_total, tau_phi, tau_theta, tau_psi]) 
-
-
-
-
-
-
-
-
-    

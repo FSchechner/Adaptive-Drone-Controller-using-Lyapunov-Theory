@@ -1,22 +1,21 @@
-# Adaptive Quadcopter Trajectory Tracking
+# Quadcopter Trajectory Tracking
 
-**Rigid body quadrotor simulator for trajectory tracking under parametric uncertainty**
+**Rigid body quadrotor simulator with cascaded PD control**
 
-Research project for Prof. Jean-Jacques Slotine's robotics course
-*MIT Nonlinear Systems Laboratory*
+Research project for robotics course
+*Harvard University*
 
 ---
 
 ## Quick Start
 
 ```bash
-# Run validation tests
+# Run controller test with waypoint tracking
 cd tests
-python3 test_rigid_body.py
+python3 test_controller.py
 
-# Run example simulations
-cd examples
-python3 example_rigid_body_sim.py
+# Run simple hover test
+python3 test_simple_hover.py
 ```
 
 ---
@@ -25,18 +24,21 @@ python3 example_rigid_body_sim.py
 
 ```
 .
-├── README.md                 # This file
-├── src/                      # Source code
-│   └── rigid_body_quadrotor.py   # Main rigid body dynamics
-├── tests/                    # Validation tests
-│   └── test_rigid_body.py        # Physics tests (rotation, energy, etc.)
-├── examples/                 # Example simulations
-│   └── example_rigid_body_sim.py # Demos: hover, gyro, point mass vs rigid body
-├── docs/                     # Documentation and papers
-│   ├── RIGID_BODY_README.md      # Detailed rigid body explanation
-│   ├── 1-s2.0-*.pdf              # Research paper
-│   └── introduction.*            # Project introduction
-└── archive/                  # Old/alternative implementations
+├── README.md                      # This file
+├── src/                           # Core physics simulation
+│   └── rigid_body_quadrotor.py        # 6-DOF rigid body dynamics
+├── controller/                    # Control algorithms
+│   └── controller.py                  # Cascaded PD controller
+├── tests/                         # Test simulations
+│   ├── test_controller.py             # Waypoint tracking test
+│   ├── test_simple_hover.py           # Hover stability test
+│   └── simple_open_loop_test.py       # Open-loop dynamics test
+├── environment/                   # Alternative dynamics implementations
+│   └── Quadcopter-Dynamics.py
+├── docs/                          # Documentation
+│   ├── RIGID_BODY_README.md           # Detailed rigid body explanation
+│   └── introduction.*                 # Project introduction
+└── archive/                       # Old implementations
 ```
 
 ---
@@ -152,18 +154,16 @@ See [docs/RIGID_BODY_README.md](docs/RIGID_BODY_README.md) for detailed physics 
 
 ---
 
-## Validation Tests
+## Tests
 
-All tests pass, verifying:
-- ✓ Rotation matrix orthogonality (Rᵀ·R = I, det=1)
-- ✓ Free fall dynamics (v_z = -g·t)
-- ✓ Hover stability (F = mg → stationary)
-- ✓ Pure rotation (torque without translation)
-- ✓ Gyroscopic coupling (demonstrates ω×(I·ω))
-- ✓ Angular momentum conservation (L constant when τ=0)
-- ✓ Energy conservation (E constant when no drag)
+Controller tests verify:
+- ✓ Hover stability at target altitude
+- ✓ Waypoint tracking in 3D space
+- ✓ Yaw pointing toward target (car-like behavior)
+- ✓ Smooth trajectory interpolation
+- ✓ Open-loop dynamics validation
 
-Run: `python3 tests/test_rigid_body.py`
+Run: `python3 tests/test_controller.py`
 
 ---
 
@@ -192,22 +192,22 @@ Run: `python3 tests/test_rigid_body.py`
 
 ---
 
-## Next Steps
+## Potential Extensions
 
-This rigid body simulator provides the foundation for:
+Possible future improvements:
 
-1. **Adaptive control layer** (parameter estimation)
-2. **Contraction-based analysis** (stability guarantees)
-3. **Trajectory tracking** with uncertainty
-4. **Real-time implementation** (fast, numerically stable)
+1. **Trajectory optimization** - Minimum-time or minimum-energy paths
+2. **Gain tuning** - Systematic PD gain selection
+3. **State estimation** - Add noise, implement Kalman filter
+4. **Hardware implementation** - Deploy on actual quadrotor
 
 ---
 
 ## References
 
-- **Lopez & Slotine (2020)**: *Contraction Metrics in Adaptive Nonlinear Control*
-- **Abdelhay & Zakriti (2019)**: *Quadcopter Trajectory Tracking Using PID*
-- **Bouabdallah (2007)**: *Design and Control of Quadrotors*
+- **Bouabdallah (2007)**: *Design and Control of Quadrotors with Focus on the Factors Influencing the Quadrotor Design*
+- **Abdelhay & Zakriti (2019)**: *Modeling of a Quadcopter Trajectory Tracking System Using PID Controller*
+- **Beard & McLain (2012)**: *Small Unmanned Aircraft: Theory and Practice*
 
 ---
 
