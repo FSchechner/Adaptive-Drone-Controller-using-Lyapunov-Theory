@@ -214,6 +214,3 @@ class QuadcopterEnv():
             self.d = drag_coeff
         if inertia is not None:
             self.I = np.array(inertia)
-
-
-

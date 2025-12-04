@@ -88,6 +88,53 @@ sol = solve_ivp(dynamics, [0, 10], x0, dense_output=True)
 
 ---
 
+## Control Law
+
+The controller uses a cascaded architecture with outer loop (position) → inner loop (attitude).
+
+### Outer Loop: Position Control
+
+**Yaw Control** (point at target):
+```
+ψ_d = arctan2(y_d - y, x_d - x)  if distance > ε
+e_ψ = wrap_to_pi(ψ_d - ψ)
+```
+
+**XY Position** (car-like control):
+```
+distance = √[(x_d - x)² + (y_d - y)²]
+v_forward = vx·cos(ψ) + vy·sin(ψ)
+θ_d = Kp_xy·distance - Kd_xy·v_forward
+θ_d = clip(θ_d, -30°, +30°)
+```
+
+**Z Position** (altitude control):
+```
+az_d = Kp_z·(z_d - z) - Kd_z·vz
+F = m·(az_d + g)
+F = clip(F, 0, 20N)
+```
+
+### Inner Loop: Attitude Control
+
+**PD control on angles**:
+```
+τ_φ = Kp_att·(φ_d - φ) - Kd_att·ωx
+τ_θ = Kp_att·(θ_d - θ) - Kd_att·ωy
+τ_ψ = Kp_att·(e_ψ) - Kd_att·ωz
+```
+
+### Control Output
+```
+u = [F, τ_φ, τ_θ, τ_ψ]
+```
+
+**Default Gains**:
+- Position: `Kp_xy=0.12, Kd_xy=0.5, Kp_z=5.0, Kd_z=3.0`
+- Attitude: `Kp_att=3.0, Kd_att=0.6`
+
+---
+
 ## Why Rigid Body?
 
 **Point mass model (WRONG)**:
