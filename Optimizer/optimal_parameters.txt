@@ -1,0 +1,27 @@
+Optimal Quadcopter Controller Parameters
+==================================================
+
+Torque limit: 1.5 Nm
+Initial cost: 25.153690
+Final cost: 24.976050
+Improvement: 0.71%
+
+Parameters:
+  Kp_long = 1.0454
+  Kd_long = 0.8045
+  Kp_lat  = 0.6028
+  Kd_lat  = 0.6044
+  Kp_z    = 4.9859
+  Kd_z    = 2.9934
+  Kp_att  = 14.9570
+  Kd_att  = 4.9808
+
+To use these parameters in QuadcopterController:
+controller = QuadcopterController(
+    mass=1.2, g=9.81,
+    Kp_long=1.0454, Kd_long=0.8045,
+    Kp_lat=0.6028, Kd_lat=0.6044,
+    Kp_z=4.9859, Kd_z=2.9934,
+    Kp_att=14.9570, Kd_att=4.9808,
+    max_tilt_deg=35.0, F_max=25.0, tau_max=1.5
+)
