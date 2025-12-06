@@ -1,18 +1,24 @@
 '''
-3D spiral trajectory simulator with varying speed for quadcopter.
-The drone follows an ascending spiral path with sinusoidally varying forward, angular, and climb speeds
-to test controller performance on dynamic curved trajectories.
+Aggressive 3D parcour to test quadcopter controller limits.
+The drone performs:
+- Rapid slalom maneuvers (sharp lateral movements)
+- Vertical climbs and dives (altitude challenges)
+- Figure-8 patterns (continuous turning)
+- Speed variations (0.5 m/s to 6 m/s)
+- Emergency braking maneuvers
+This tests position tracking, velocity tracking, and acceleration limits.
 '''
 
 import numpy as np
 import sys
 sys.path.insert(0, '../../environment')
 sys.path.insert(0, '../../controller')
-from adapted_parameters_Quadcopter_Dynamics import environment
-from adaptive_controller import QuadcopterController
+sys.path.insert(0,'../../Drone')
+from Quadcopter_Dynamics import environment
+from controller import QuadcopterController
+from Drone_1 import Drone
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
 
 class simulator:
     def __init__(self):
@@ -20,61 +26,78 @@ class simulator:
         self.state[2] = 0.1
         self.dt = 0.01
         self.time_step = 0.0
-        self.max_time = 50
+        self.max_time = 30
         self.max_time_steps = int(self.max_time / self.dt)
 
         self.state_history = []
         self.control_history = []
         self.time_history = []
         self.error_history = []
-
-        self.env = environment(mass=12, Ixx=0.55, Iyy=0.55, Izz=0.7)
-        self.controller = QuadcopterController(mass=1.2, g=9.81)
+        self.Drone = Drone()
+        self.env = environment(mass= self.Drone.m, Ixx= self.Drone.Ixx, Iyy= self.Drone.Iyy, Izz= self.Drone.Izz)
+        self.controller = QuadcopterController(g=9.81)
 
     def get_target(self, t):
-        # Base trajectory parameters
-        radius = 3.0                # Radius of spiral (m)
-        base_angular = 0.4          # Base angular frequency (rad/s)
-        base_climb = 0.2            # Base climb rate (m/s)
-        base_forward = 1.0          # Base forward speed (m/s)
-        z_start = 1.0               # Starting altitude (m)
-        speed_freq = 0.3            # Frequency of speed variation (rad/s)
+        """
+        Moderate parcour with 5 sections:
+        0-6s: Smooth slalom (gentle S-curves)
+        6-12s: Circular climb (spiral up)
+        12-18s: Figure-8 pattern at constant altitude
+        18-24s: Straight line with speed variation
+        24-30s: Descending arc to hover
+        """
 
-        # Compute angular phase (integral of angular_freq(t))
-        # angular_freq(t) = base_angular * (1 + 0.15 * sin(1.5 * speed_freq * t))
-        # integral = base_angular * t - (0.15 * base_angular / (1.5 * speed_freq)) * cos(1.5 * speed_freq * t) + C
-        ang_integral = base_angular * t - (0.15 * base_angular / (1.5 * speed_freq)) * (np.cos(1.5 * speed_freq * t) - 1.0)
+        # Section 1: Smooth Slalom (0-6s)
+        if t < 6.0:
+            # Gentle forward motion with smooth lateral weaving
+            gate_width = 2.5    # Lateral displacement (reduced)
+            slalom_freq = 0.5   # Gates per second (slower)
 
-        # Position with varying speeds (integrated from velocity functions)
-        x_d = base_forward * (t - (0.2 / speed_freq) * (np.cos(speed_freq * t) - 1.0))
-        y_d = radius * np.cos(ang_integral)
-        z_d = z_start + base_climb * (t - (0.1 / (0.8 * speed_freq)) * (np.cos(0.8 * speed_freq * t) - 1.0))
+            x_d = 2.0 * t  # Constant forward speed 2 m/s
+            y_d = gate_width * np.sin(slalom_freq * np.pi * t)
+            z_d = 2.0 + 0.2 * t  # Gentle climb
+
+        # Section 2: Circular Climb (6-12s)
+        elif t < 12.0:
+            t_local = t - 6.0
+            radius = 3.0
+            omega = 0.6  # rad/s (moderate rotation)
+
+            x_d = 12.0 + radius * np.cos(omega * t_local)
+            y_d = radius * np.sin(omega * t_local)
+            z_d = 3.2 + 0.3 * t_local  # Gradual climb
+
+        # Section 3: Figure-8 Pattern (12-18s)
+        elif t < 18.0:
+            t_local = t - 12.0
+            omega = 0.5  # Angular frequency
+            radius_8 = 4.0
+
+            x_d = 15.0 + radius_8 * np.sin(omega * t_local)
+            y_d = 2.0 * np.sin(2 * omega * t_local)  # Creates figure-8
+            z_d = 5.0  # Constant altitude
+
+        # Section 4: Straight Line with Speed Variation (18-24s)
+        elif t < 24.0:
+            t_local = t - 18.0
+            # Moderate speed variation
+            speed = 2.5 + 0.5 * np.sin(0.8 * t_local)  # 2-3 m/s
+
+            x_d = 15.0 + 2.5 * t_local + (0.5/0.8) * (1 - np.cos(0.8 * t_local))
+            y_d = 1.5 * np.sin(0.6 * t_local)  # Gentle sway
+            z_d = 5.0 + 0.8 * np.sin(t_local)  # Moderate altitude variation
+
+        # Section 5: Descending Arc to Hover (24-30s)
+        else:
+            t_local = t - 24.0
+            # Smooth descent and deceleration
+            decay = np.exp(-0.5 * t_local)
+
+            x_d = 30.0 + 3.0 * decay
+            y_d = 2.0 * decay * np.sin(0.6 * 24.0)
+            z_d = 5.0 - 2.0 * (1 - decay)  # Descend to 3m
 
         return np.array([x_d, y_d, z_d])
-
-    def get_target_velocity(self, t):
-        """Target velocity for 3D spiral with varying speed (derivative of position)"""
-        # Base trajectory parameters (must match get_target())
-        radius = 3.0
-        base_angular = 0.4
-        base_climb = 0.2
-        base_forward = 1.0
-        speed_freq = 0.3
-
-        # Time-varying speeds
-        forward_speed = base_forward * (1.0 + 0.2 * np.sin(speed_freq * t))
-        angular_freq = base_angular * (1.0 + 0.15 * np.sin(1.5 * speed_freq * t))
-        climb_rate = base_climb * (1.0 + 0.1 * np.sin(0.8 * speed_freq * t))
-
-        # Compute angular phase for derivative calculation
-        ang_integral = base_angular * t - (0.15 * base_angular / (1.5 * speed_freq)) * (np.cos(1.5 * speed_freq * t) - 1.0)
-
-        # Velocity is time derivative of position
-        vx_d = forward_speed
-        vy_d = -radius * angular_freq * np.sin(ang_integral)
-        vz_d = climb_rate
-
-        return np.array([vx_d, vy_d, vz_d])
 
     def get_error(self, target):
         error_x = target[0] - self.state[0]
@@ -175,7 +198,7 @@ class simulator:
         ax1.set_xlabel('X (m)')
         ax1.set_ylabel('Y (m)')
         ax1.set_zlabel('Z (m)')
-        ax1.set_title('3D Spiral Trajectory with Varying Speed')
+        ax1.set_title('3D Aggressive Parcour - Position Tracking')
         ax1.legend()
         ax1.grid(True)
 
@@ -262,21 +285,16 @@ class simulator:
         ax9.grid(True)
 
         plt.tight_layout()
-        plt.savefig('spiral_results.png', dpi=300)
-        print(f"\nPlot saved: spiral_results.png")
+        plt.savefig('parcour_results.png', dpi=300)
+        print(f"\nPlot saved: parcour_results.png")
         plt.show()
 
     def simulation(self):
         for step in range(self.max_time_steps):
             target = self.get_target(self.time_step)
-            target_vel = self.get_target_velocity(self.time_step)
-            print(target)
-            u = self.controller.controller(self.state, target, target_vel)
-            print('u',u)
+            u = self.controller.controller(self.state, target, dt=self.dt)
             state_dot = self.env.step(self.state, u)
-            print('state_dot:',state_dot)
             self.state = self.state + state_dot * self.dt
-            print('state',self.state)
 
             if step % 10 == 0:
                 self.state_history.append(self.state.copy())

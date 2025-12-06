@@ -6,16 +6,17 @@ from contextlib import redirect_stdout, redirect_stderr
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-sys.path.insert(0, '../simulator')
 sys.path.insert(0, '../environment')
 sys.path.insert(0, '../controller')
+sys.path.insert(0, '../simulator')
+sys.path.insert(0,'../Drone')
 
 from Quadcopter_Dynamics import environment
-from adaptive_controller import QuadcopterController
-
+from controller import QuadcopterController
+from Drone_1 import Drone
 
 class ParameterOptimizer:
-    def __init__(self, max_iterations=100, tau_max=3.5):
+    def __init__(self, max_iterations=200, tau_max=3.5):
         self.max_iterations = max_iterations
         self.iteration = 0
         self.best_cost = float('inf')
@@ -23,7 +24,7 @@ class ParameterOptimizer:
 
         # Simulation parameters
         self.dt = 0.01
-        self.max_time = 25
+        self.max_time = 30
         self.max_time_steps = int(self.max_time / self.dt)
 
         # Controller constraints
@@ -35,21 +36,57 @@ class ParameterOptimizer:
         self.w_oscillation = 0.4   # Weight for torque derivative (oscillations)
 
     def get_target(self, t):
-        """Target trajectory - straight line"""
-        speed = 2.0
-        altitude = 3.0
-        x_d = speed * t
-        y_d = 0.0
-        z_d = altitude
-        return np.array([x_d, y_d, z_d])
+        """
+        Moderate parcour with 5 sections:
+        0-6s: Smooth slalom (gentle S-curves)
+        6-12s: Circular climb (spiral up)
+        12-18s: Figure-8 pattern at constant altitude
+        18-24s: Straight line with speed variation
+        24-30s: Descending arc to hover
+        """
 
-    def get_target_velocity(self, t):
-        """Target velocity for straight line trajectory"""
-        speed = 2.0
-        vx_d = speed
-        vy_d = 0.0
-        vz_d = 0.0
-        return np.array([vx_d, vy_d, vz_d])
+        # Section 1: Smooth Slalom (0-6s)
+        if t < 6.0:
+            gate_width = 2.5
+            slalom_freq = 0.5
+            x_d = 2.0 * t
+            y_d = gate_width * np.sin(slalom_freq * np.pi * t)
+            z_d = 2.0 + 0.2 * t
+
+        # Section 2: Circular Climb (6-12s)
+        elif t < 12.0:
+            t_local = t - 6.0
+            radius = 3.0
+            omega = 0.6
+            x_d = 12.0 + radius * np.cos(omega * t_local)
+            y_d = radius * np.sin(omega * t_local)
+            z_d = 3.2 + 0.3 * t_local
+
+        # Section 3: Figure-8 Pattern (12-18s)
+        elif t < 18.0:
+            t_local = t - 12.0
+            omega = 0.5
+            radius_8 = 4.0
+            x_d = 15.0 + radius_8 * np.sin(omega * t_local)
+            y_d = 2.0 * np.sin(2 * omega * t_local)
+            z_d = 5.0
+
+        # Section 4: Straight Line with Speed Variation (18-24s)
+        elif t < 24.0:
+            t_local = t - 18.0
+            x_d = 15.0 + 2.5 * t_local + (0.5/0.8) * (1 - np.cos(0.8 * t_local))
+            y_d = 1.5 * np.sin(0.6 * t_local)
+            z_d = 5.0 + 0.8 * np.sin(t_local)
+
+        # Section 5: Descending Arc to Hover (24-30s)
+        else:
+            t_local = t - 24.0
+            decay = np.exp(-0.5 * t_local)
+            x_d = 30.0 + 3.0 * decay
+            y_d = 2.0 * decay * np.sin(0.6 * 24.0)
+            z_d = 5.0 - 2.0 * (1 - decay)
+
+        return np.array([x_d, y_d, z_d])
 
     def run_simulation(self, params):
         """Run simulation with given parameters and return cost"""
@@ -58,16 +95,15 @@ class ParameterOptimizer:
             Kp_long, Kd_long, Kp_lat, Kd_lat, Kp_z, Kd_z, Kp_att, Kd_att = params
 
             # Create environment and controller with these parameters
-            env = environment(mass=1.2, Ixx=0.028, Iyy=0.028, Izz=0.055)
+            drone = Drone()
+            env = environment(mass=drone.m, Ixx=drone.Ixx, Iyy=drone.Iyy, Izz=drone.Izz)
             controller = QuadcopterController(
-                mass=1.2, g=9.81,
+                g=9.81,
                 Kp_long=Kp_long, Kd_long=Kd_long,
                 Kp_lat=Kp_lat, Kd_lat=Kd_lat,
                 Kp_z=Kp_z, Kd_z=Kd_z,
                 Kp_att=Kp_att, Kd_att=Kd_att,
-                max_tilt_deg=35.0,
-                F_max=25.0,
-                tau_max=self.tau_max
+                max_tilt_deg=35.0
             )
 
             # Initialize state
@@ -84,8 +120,7 @@ class ParameterOptimizer:
             u_prev = None
             for step in range(self.max_time_steps):
                 target = self.get_target(time_step)
-                target_vel = self.get_target_velocity(time_step)
-                u = controller.controller(state, target, target_vel)
+                u = controller.controller(state, target, dt=self.dt)
                 state_dot = env.step(state, u)
                 state = state + state_dot * self.dt
 
@@ -280,16 +315,15 @@ class ParameterOptimizer:
         params = self.best_params
         Kp_long, Kd_long, Kp_lat, Kd_lat, Kp_z, Kd_z, Kp_att, Kd_att = params
 
-        env = environment(mass=1.2, Ixx=0.028, Iyy=0.028, Izz=0.055)
+        drone = Drone()
+        env = environment(mass=drone.m, Ixx=drone.Ixx, Iyy=drone.Iyy, Izz=drone.Izz)
         controller = QuadcopterController(
-            mass=1.2, g=9.81,
+            g=9.81,
             Kp_long=Kp_long, Kd_long=Kd_long,
             Kp_lat=Kp_lat, Kd_lat=Kd_lat,
             Kp_z=Kp_z, Kd_z=Kd_z,
             Kp_att=Kp_att, Kd_att=Kd_att,
-            max_tilt_deg=35.0,
-            F_max=25.0,
-            tau_max=self.tau_max
+            max_tilt_deg=35.0
         )
 
         # Initialize state
@@ -305,8 +339,7 @@ class ParameterOptimizer:
         time_step = 0.0
         for step in range(self.max_time_steps):
             target = self.get_target(time_step)
-            target_vel = self.get_target_velocity(time_step)
-            u = controller.controller(state, target, target_vel)
+            u = controller.controller(state, target, dt=self.dt)
             state_dot = env.step(state, u)
             state = state + state_dot * self.dt
 

@@ -8,11 +8,12 @@ import numpy as np
 import sys
 sys.path.insert(0, '../../environment')
 sys.path.insert(0, '../../controller')
-from adapted_parameters_Quadcopter_Dynamics import environment
+sys.path.insert(0,'../../Drone')
+from Quadcopter_Dynamics import environment
 from controller import QuadcopterController
+from Drone_1 import Drone_with_Package
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
 
 class simulator:
     def __init__(self):
@@ -27,22 +28,19 @@ class simulator:
         self.control_history = []
         self.time_history = []
         self.error_history = []
-
-        self.env = environment(mass=1.2, Ixx=0.055, Iyy=0.055, Izz=0.7)
-        self.controller = QuadcopterController(mass=1.2, g=9.81)
+        self.Drone = Drone_with_Package()
+        self.env = environment(mass= self.Drone.m, Ixx= self.Drone.Ixx, Iyy= self.Drone.Iyy, Izz= self.Drone.Izz)
+        self.controller = QuadcopterController(g=9.81)
 
     def get_target(self, t):
         # Base trajectory parameters
         radius = 3.0                # Radius of spiral (m)
-        base_angular = 0.4          # Base angular frequency (rad/s)
+        base_angular = 1.5         # Base angular frequency (rad/s)
         base_climb = 0.2            # Base climb rate (m/s)
         base_forward = 1.0          # Base forward speed (m/s)
-        z_start = 1.0               # Starting altitude (m)
+        z_start = 4.0              # Starting altitude (m)
         speed_freq = 0.3            # Frequency of speed variation (rad/s)
 
-        # Compute angular phase (integral of angular_freq(t))
-        # angular_freq(t) = base_angular * (1 + 0.15 * sin(1.5 * speed_freq * t))
-        # integral = base_angular * t - (0.15 * base_angular / (1.5 * speed_freq)) * cos(1.5 * speed_freq * t) + C
         ang_integral = base_angular * t - (0.15 * base_angular / (1.5 * speed_freq)) * (np.cos(1.5 * speed_freq * t) - 1.0)
 
         # Position with varying speeds (integrated from velocity functions)
@@ -56,9 +54,9 @@ class simulator:
         """Target velocity for 3D spiral with varying speed (derivative of position)"""
         # Base trajectory parameters (must match get_target())
         radius = 3.0
-        base_angular = 0.4
+        base_angular = 1.5
         base_climb = 0.2
-        base_forward = 1.0
+        base_forward = 4.0
         speed_freq = 0.3
 
         # Time-varying speeds
@@ -269,14 +267,9 @@ class simulator:
     def simulation(self):
         for step in range(self.max_time_steps):
             target = self.get_target(self.time_step)
-            target_vel = self.get_target_velocity(self.time_step)
-            print(target)
-            u = self.controller.controller(self.state, target, target_vel)
-            print('u',u)
+            u = self.controller.controller(self.state, target, dt=self.dt)
             state_dot = self.env.step(self.state, u)
-            print('state_dot:',state_dot)
             self.state = self.state + state_dot * self.dt
-            print('state',self.state)
 
             if step % 10 == 0:
                 self.state_history.append(self.state.copy())
