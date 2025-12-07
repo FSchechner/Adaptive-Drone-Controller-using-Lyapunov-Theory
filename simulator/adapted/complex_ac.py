@@ -1,13 +1,4 @@
-'''
-Aggressive 3D parcour to test quadcopter controller limits.
-The drone performs:
-- Rapid slalom maneuvers (sharp lateral movements)
-- Vertical climbs and dives (altitude challenges)
-- Figure-8 patterns (continuous turning)
-- Speed variations (0.5 m/s to 6 m/s)
-- Emergency braking maneuvers
-This tests position tracking, velocity tracking, and acceleration limits.
-'''
+
 
 import numpy as np
 import sys
@@ -16,7 +7,7 @@ sys.path.insert(0, '../../controller')
 sys.path.insert(0,'../../Drone')
 from Quadcopter_Dynamics import environment
 from adaptive_controller import QuadcopterController
-from Drone_1 import Drone
+from Drone_1 import Drone_with_Package
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -33,7 +24,7 @@ class simulator:
         self.control_history = []
         self.time_history = []
         self.error_history = []
-        self.Drone = Drone()
+        self.Drone = Drone_with_Package()
         self.env = environment(mass= self.Drone.m, Ixx= self.Drone.Ixx, Iyy= self.Drone.Iyy, Izz= self.Drone.Izz)
         self.controller = QuadcopterController(g=9.81)
 
