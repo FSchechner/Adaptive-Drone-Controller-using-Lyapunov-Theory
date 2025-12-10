@@ -13,56 +13,68 @@ import matplotlib.pyplot as plt
 
 class spiral:
     def __init__(self, controller, drone_class=None, disturbance=None):
-        self.state = np.array([0.0,0.0,0.0,0.0,0.0,0.0])
         self.t = 0.0
         self.dt = 0.01
-        self.r = 5
+        self.r = 5.0
+        self.omega = 1.0
+        self.vz_spiral = 2.0
+        self.a_linear = np.array([2.0, 2.0, 2.0])
+
         self.env = SimpleQuadcopter(drone_class=drone_class, constant_disturbance=disturbance)
         self.controller = controller
         self.F = np.array([0.0, 0.0, 0.0])
         self.pos_hist = []
         self.pos_d_hist = []
 
-    def step(self):
-        if self.t < 20:
-            self.state = np.array([self.r*np.cos(self.t),
-                               self.r*np.sin(self.t),
-                               self.state[2]+self.state[5]*self.dt,
-                               -self.r*np.sin(self.t),
-                               self.r*np.cos(self.t),
-                               2
-                               ])
-        else: 
-            if self.t < 25: 
-                self.state = np.array([self.r/2*np.cos(self.t*2),
-                               self.state[1]+self.state[4]*self.dt,
-                               self.state[2]+self.state[5]*self.dt,
-                               2,
-                               2,
-                               2
-                               ])
+        # Pre-compute boundary conditions for piecewise trajectory
+        self.pos20, self.vel20, _ = self._spiral_state(20.0)
+        tau_linear = 5.0
+        self.pos25 = self.pos20 + self.vel20 * tau_linear + 0.5 * self.a_linear * (tau_linear ** 2)
 
-            else: 
-                self.state = np.array([self.state[0]+self.state[3]*self.dt,
-                               self.state[1]+self.state[4]*self.dt,
-                               self.state[2]+self.state[5]*self.dt,
-                               0,
-                               0,
-                               0
-                               ])
+    def _spiral_state(self, t):
+        """Desired pos/vel/acc for the spiral phase (0-20s)."""
+        pos = np.array([
+            self.r * np.cos(self.omega * t),
+            self.r * np.sin(self.omega * t),
+            self.vz_spiral * t
+        ])
+        vel = np.array([
+            -self.r * self.omega * np.sin(self.omega * t),
+            self.r * self.omega * np.cos(self.omega * t),
+            self.vz_spiral
+        ])
+        acc = np.array([
+            -self.r * (self.omega ** 2) * np.cos(self.omega * t),
+            -self.r * (self.omega ** 2) * np.sin(self.omega * t),
+            0.0
+        ])
+        return pos, vel, acc
+
+    def step_reference(self):
+        """Generate desired position, velocity, and acceleration."""
+        if self.t < 20.0:
+            pos_d, vel_d, acc_d = self._spiral_state(self.t)
+        elif self.t < 25.0:
+            tau = self.t - 20.0
+            pos_d = self.pos20 + self.vel20 * tau + 0.5 * self.a_linear * (tau ** 2)
+            vel_d = self.vel20 + self.a_linear * tau
+            acc_d = self.a_linear
+        else:
+            pos_d = self.pos25
+            vel_d = np.array([0.0, 0.0, 0.0])
+            acc_d = np.array([0.0, 0.0, 0.0])
 
         self.t += self.dt
-
-        
+        return pos_d, vel_d, acc_d
 
     def get_control(self):
-        self.step()
+        pos_d, vel_d, acc_d = self.step_reference()
         state = self.env.step(self.F, self.dt)
         pos = state[:3]
         vel = state[3:]
-        self.F = self.controller.compute_control(pos, vel, self.state[:3])
+        self.F = self.controller.compute_control(pos, vel, pos_d, vel_d, acc_d)
         self.pos_hist.append(pos.copy())
-        self.pos_d_hist.append(self.state[:3])
+        self.pos_d_hist.append(pos_d.copy())
 
     def simulation(self):
         self.max_time = 30.0
@@ -156,7 +168,7 @@ if __name__ == "__main__":
     print(f"Errors: x={ex:.3f} y={ey:.3f} z={ez:.3f} total={et:.3f}\n")
 
     # Test 2: Nominal mass + 3N disturbance
-    disturbance = [3.0, 0.0, 0.0]
+    disturbance = [7.0, 0.0, 0.0]
     print("=== Test 1: Nominal Mass + 3N Disturbance ===")
     print("AC + Drone + Disturbance")
     sim3 = spiral(AdaptiveController(), Drone, disturbance)

@@ -6,7 +6,7 @@ class PDController:
                  Kp_xy=29.83,  # Optimized for simplified dynamics
                  Kd_xy=8.78,
                  Kp_z=11.12,
-                 Ki_xy = 0.0,
+                 Ki_xy = 0.0001,
                  Ki_z = 0.0,
                  Kd_z=13.81):
     
@@ -22,11 +22,13 @@ class PDController:
         self.pos_prev = None
         self.F_max = 60
 
-    def compute_control(self, pos, vel, pos_d):
-        if self.pos_prev is None:
-            vel_d = np.array([0.0,0.0,0.0])
-        else:
-            vel_d = (pos_d - self.pos_prev)/self.dt
+    def compute_control(self, pos, vel, pos_d, vel_d=None, acc_d=None):
+        # Desired velocity via finite differences (matches paper description)
+        if vel_d is None:
+            if self.pos_prev is None:
+                vel_d = np.array([0.0, 0.0, 0.0])
+            else:
+                vel_d = (pos_d - self.pos_prev) / self.dt
         
         # Position and velocity errors
         e_pos = pos - pos_d

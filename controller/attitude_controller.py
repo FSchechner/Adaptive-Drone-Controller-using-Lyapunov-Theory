@@ -68,7 +68,7 @@ class AttitudeController:
 
         tau = -self.Kp_att * e_att - self.Kd_att * e_omega
         tau = np.clip(tau, -self.tau_max, self.tau_max)
-        
+
 
         u = np.array([F_thrust, tau[0], tau[1], tau[2]])
 
